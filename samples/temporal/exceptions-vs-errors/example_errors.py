@@ -15,24 +15,22 @@ the server:
     git clone https://github.com/temporalio/docker-compose.git
     cd docker-compose
     docker compose up
-
-Then, run the following command in a separate terminal:
-
-    python3 workflow_worker.py
 """
 
 import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import timedelta
+from typing import Union
 
 from temporalio import activity, workflow
 from temporalio.client import Client
 from temporalio.common import RetryPolicy
-from temporalio.exceptions import ApplicationError, FailureError
+from temporalio.exceptions import FailureError
 from temporalio.worker import Worker
 
 retry_policy = RetryPolicy(maximum_attempts=3)
+TASK_QUEUE = "hello-activity-task-queue"
 
 
 # While we could use multiple parameters in the activity, Temporal strongly
@@ -50,18 +48,17 @@ class ComposeGreetingOutput:
     name: str
 
 
-@activity.defn
-async def throw_exception(input: ComposeGreetingInput) -> ComposeGreetingOutput:
-    """Activity that throws an exception."""
-    raise Exception("Exception from activity")
+@dataclass
+class ComposeGreetingError:
+    error: str
 
 
 @activity.defn
-async def throw_non_retryable_exception(
+async def return_error(
     input: ComposeGreetingInput,
-) -> ComposeGreetingOutput:
+) -> Union[ComposeGreetingOutput, ComposeGreetingError]:
     """Activity that throws an exception."""
-    raise ApplicationError("Exception from activity", non_retryable=True)
+    return ComposeGreetingError("Error from activity")
 
 
 @workflow.defn
@@ -70,17 +67,17 @@ class ExceptionWorkflow:
     async def run(self, name: str) -> ComposeGreetingOutput:
         workflow.logger.info("Running workflow with parameter %s" % name)
         try:
-            return await workflow.execute_activity(
-                throw_exception,
+            value = await workflow.execute_activity(
+                return_error,
                 ComposeGreetingInput("Hello", name),
                 start_to_close_timeout=timedelta(seconds=10),
                 retry_policy=retry_policy,
             )
-        except FailureError as e:
-            logging.info(f"FailureError.cause: {e.cause}")
-            raise
+            if isinstance(value, ComposeGreetingError):
+                return ComposeGreetingError(value.error)
+            return value
         except Exception as e:
-            logging.exception(f"Exception in workflow of type {type(e)}")
+            logging.error(f"Exception in workflow of type {type(e)}")
             raise
 
 
@@ -90,12 +87,14 @@ class ExceptionInChildWorkflow:
     async def run(self, name: str) -> ComposeGreetingOutput:
         workflow.logger.info("Running workflow with parameter %s" % name)
         try:
-            return await workflow.execute_child_workflow(
+            value = await workflow.execute_child_workflow(
                 workflow=ExceptionWorkflow, arg=name  # type: ignore
             )
+            if isinstance(value, ComposeGreetingError):
+                raise Exception(value.error)
         except FailureError as e:
             logging.info(f"e.cause: {e.cause}")
-            logging.exception("Exception in child workflow")
+            logging.error("Exception in child workflow")
             raise
 
 
@@ -106,10 +105,10 @@ async def run__workflow_activity_exception(client):
             ExceptionWorkflow.run,
             "World",
             id="hello-activity-workflow-id",
-            task_queue="hello-activity-task-queue",
+            task_queue=TASK_QUEUE,
         )
     except Exception:
-        logging.exception("Error executing workflow")
+        logging.error("Error executing workflow")
 
 
 async def run__workflow_childworkflow_activity_exception(client):
@@ -119,10 +118,10 @@ async def run__workflow_childworkflow_activity_exception(client):
             ExceptionInChildWorkflow.run,
             "World",
             id="hello-activity-workflow-id",
-            task_queue="hello-activity-task-queue",
+            task_queue=TASK_QUEUE,
         )
     except Exception:
-        logging.exception("Error executing workflow")
+        logging.error("Error executing workflow")
 
 
 async def main():
@@ -132,9 +131,9 @@ async def main():
 
     async with Worker(
         client,
-        task_queue="hello-activity-task-queue",
+        task_queue=TASK_QUEUE,
         workflows=[ExceptionWorkflow, ExceptionInChildWorkflow],
-        activities=[throw_exception],
+        activities=[return_error],
         debug_mode=True,
     ):
         await run__workflow_activity_exception(client)
