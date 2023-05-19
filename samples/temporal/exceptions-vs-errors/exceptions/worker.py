@@ -6,8 +6,12 @@ from datetime import timedelta
 from temporalio import activity, workflow
 from temporalio.client import Client
 from temporalio.common import RetryPolicy
-from temporalio.exceptions import (ActivityError, ApplicationError,
-                                   ChildWorkflowError, FailureError)
+from temporalio.exceptions import (
+    ActivityError,
+    ApplicationError,
+    ChildWorkflowError,
+    FailureError,
+)
 from temporalio.worker import Worker
 
 retry_policy = RetryPolicy(maximum_attempts=3)
@@ -132,6 +136,7 @@ async def main():
 
     client = await Client.connect("localhost:7233")
 
+    logging.log(logging.INFO, "Starting Worker...")
     await Worker(
         client,
         task_queue=TASK_QUEUE,
