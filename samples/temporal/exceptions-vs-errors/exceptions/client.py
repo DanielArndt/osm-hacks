@@ -1,21 +1,6 @@
 #!/usr/bin/env python3
 
-""" Example showing how exceptions are wrapped by the temporal framework.
-
-To run this example, you will need to have a Temporal server running.
-
-You can run the server via docker using this repository:
-
-https://github.com/temporalio/docker-compose
-
-For convenience, the quick start instructions are copied here. Assuming you
-have docker and docker compose installed, you can run the following commands to
-start the server:
-
-    git clone https://github.com/temporalio/docker-compose.git
-    cd docker-compose
-    docker compose up
-"""
+""" Example showing how exceptions are wrapped by the temporal framework.  """
 
 import asyncio
 import logging

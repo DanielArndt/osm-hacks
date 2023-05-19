@@ -1,21 +1,7 @@
 #!/usr/bin/env python3
 
-""" This is a simple example of a Temporal workflow that invokes an activity.
-
-To run this example, you will need to have a Temporal server running.
-
-You can run the server via docker using this repository:
-
-https://github.com/temporalio/docker-compose
-
-For convenience, the quick start instructions are copied here. Assuming you have
-docker and docker compose installed, you can run the following commands to start
-the server:
-
-    git clone https://github.com/temporalio/docker-compose.git
-    cd docker-compose
-    docker compose up
-"""
+""" This is an example for testing how error return values might work with
+temporal"""
 
 import asyncio
 import logging
@@ -64,7 +50,9 @@ async def return_error(
 @workflow.defn
 class ExceptionWorkflow:
     @workflow.run
-    async def run(self, name: str) -> ComposeGreetingOutput:
+    async def run(
+        self, name: str
+    ) -> Union[ComposeGreetingOutput, ComposeGreetingError]:
         workflow.logger.info("Running workflow with parameter %s" % name)
         try:
             value = await workflow.execute_activity(
@@ -92,6 +80,7 @@ class ExceptionInChildWorkflow:
             )
             if isinstance(value, ComposeGreetingError):
                 raise Exception(value.error)
+            return value
         except FailureError as e:
             logging.info(f"e.cause: {e.cause}")
             logging.error("Exception in child workflow")
